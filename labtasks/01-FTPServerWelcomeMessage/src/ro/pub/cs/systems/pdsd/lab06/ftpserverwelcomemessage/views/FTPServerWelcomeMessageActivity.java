@@ -1,7 +1,13 @@
 package ro.pub.cs.systems.pdsd.lab06.ftpserverwelcomemessage.views;
 
+import java.io.BufferedReader;
+import java.net.Socket;
+
+import org.apache.http.message.BufferedHeader;
+
 import ro.pub.cs.systems.pdsd.lab06.ftpserverwelcomemessage.R;
 import ro.pub.cs.systems.pdsd.lab06.ftpserverwelcomemessage.general.Constants;
+import ro.pub.cs.systems.pdsd.lab06.ftpserverwelcomemessage.general.Utilities;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
@@ -13,16 +19,16 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 public class FTPServerWelcomeMessageActivity extends Activity {
-	
+
 	private EditText FTPServerAddressEditText;
 	private TextView welcomeMessageTextView;
-	
+
 	protected class FTPServerCommunicationThread extends Thread {
-		
+
 		@Override
 		public void run() {
 			try {
-				
+
 				// TODO: exercise 4
 				// open socket with FTPServerAddress (taken from FTPServerAddressEditText edit text) and port (Constants.FTP_PORT = 21)
 				// get the BufferedReader attached to the socket (call to the Utilities.getReader() method)
@@ -33,6 +39,39 @@ public class FTPServerWelcomeMessageActivity extends Activity {
 				// append the line to the welcomeMessageTextView text view content (on the UI thread!!!)
 				// close the socket
 
+				welcomeMessageTextView.post(new Runnable() {
+					@Override
+					public void run() {
+						welcomeMessageTextView.setText("");
+					}
+				});
+
+				Socket socket = new Socket(FTPServerAddressEditText.getText().toString(), Constants.FTP_PORT);
+				BufferedReader bufferedReader = new BufferedReader(Utilities.getReader(socket));
+
+				String line = bufferedReader.readLine();
+
+				if (line.startsWith(Constants.FTP_MULTILINE_START_CODE)){
+					
+					while ((line = bufferedReader.readLine()) != null){
+						if(!line.equals(Constants.FTP_MULTILINE_END_CODE1) && !line.startsWith(Constants.FTP_MULTILINE_END_CODE2)){
+							final String myLine = line;
+							welcomeMessageTextView.post(new Runnable() {
+								@Override
+								public void run() {
+									welcomeMessageTextView.append(myLine + "\n");
+								}
+							});
+						}
+						else {
+							break;
+						}
+						
+					}
+				}
+
+				socket.close();
+
 			} catch (Exception exception) {
 				Log.e(Constants.TAG, "An exception has occurred: "+exception.getMessage());
 				if (Constants.DEBUG) {
@@ -41,10 +80,10 @@ public class FTPServerWelcomeMessageActivity extends Activity {
 			}
 		}
 	}	
-	
+
 	private ButtonClickListener buttonClickListener = new ButtonClickListener();
 	private class ButtonClickListener implements Button.OnClickListener {
-		
+
 		@Override
 		public void onClick(View view) {
 			new FTPServerCommunicationThread().start();
@@ -55,10 +94,10 @@ public class FTPServerWelcomeMessageActivity extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_ftpserver_welcome_message);
-		
+
 		FTPServerAddressEditText = (EditText)findViewById(R.id.ftp_server_address_edit_text);
 		welcomeMessageTextView = (TextView)findViewById(R.id.welcome_message_text_view);
-		
+
 		Button displayWelcomeMessageButton = (Button)findViewById(R.id.display_welcome_message_button);
 		displayWelcomeMessageButton.setOnClickListener(buttonClickListener);
 	}
