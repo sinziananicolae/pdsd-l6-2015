@@ -21,6 +21,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class ClientFragment extends Fragment {
 	
@@ -82,7 +83,25 @@ public class ClientFragment extends Fragment {
 			}
 			
 			PrintStream requestPrintWriter = new PrintStream(requestStream);
-			
+			final String word = wordEditText.getText().toString();
+			if (word.length() > 2) {
+				Log.d(Constants.TAG, "[CLIENT] Sent \""+word+"\" on socket "+socket);
+				requestPrintWriter.println(word);
+				mostRecentWordSent = word;
+				clientHistoryTextView.post(new Runnable() {
+					@Override
+					public void run() {
+						clientHistoryTextView.setText("Client sent word " + word + " to server\n"+clientHistoryTextView.getText());					
+					}
+				});
+			} else {
+				handler.post(new Runnable() {
+					@Override
+					public void run() {
+						Toast.makeText(getActivity(), "Word must be at least 2 characters long!", Toast.LENGTH_LONG).show();
+					}
+				});
+			}
 			try {
 				responseStream = socket.getInputStream();
 			} catch (IOException ioException) {
@@ -92,8 +111,51 @@ public class ClientFragment extends Fragment {
 				}
 			}
 			BufferedReader responseReader = new BufferedReader(new InputStreamReader(responseStream));
-
-			// TODO: exercise 7
+			try {
+				final String response = responseReader.readLine();
+				Log.d(Constants.TAG, "[CLIENT] Received \""+response+"\", most recend word was \""+mostRecentWordSent+"\" on socket "+socket);
+				clientHistoryTextView.post(new Runnable() {
+					@Override
+					public void run() {
+						clientHistoryTextView.setText("Client received word "+response+" from server\n"+clientHistoryTextView.getText());
+					}
+				});
+				if (Constants.END_GAME.equals(response)) {
+					handler.post(new Runnable() {
+						@Override
+						public void run() {
+							wordEditText.setText("");
+							wordEditText.setEnabled(false);
+							sendButton.setEnabled(false);
+							clientHistoryTextView.setText("Communication ended!\n"+clientHistoryTextView.getText());
+						}
+					});	
+				} else if (mostRecentWordSent.isEmpty() || !mostRecentWordSent.equals(response)) {
+					mostRecentValidPrefix = response.substring(response.length() - 2, response.length());
+					wordEditText.post(new Runnable() {
+						@Override
+						public void run() {
+							wordEditText.setText(mostRecentValidPrefix);
+							wordEditText.setSelection(2);
+						}
+					});
+				} else {
+					wordEditText.post(new Runnable() {
+						@Override
+						public void run() {
+							wordEditText.setText(mostRecentValidPrefix);
+							if ((mostRecentValidPrefix != null) && (mostRecentValidPrefix.length() == 2)) {
+								wordEditText.setSelection(2);
+							}
+						}
+					});
+				}
+			} catch (IOException ioException) {
+				Log.e(Constants.TAG, "An exception has occurred: "+ioException.getMessage());
+				if (Constants.DEBUG) {
+					ioException.printStackTrace();
+				}
+			}
 		}
 	}	
 	

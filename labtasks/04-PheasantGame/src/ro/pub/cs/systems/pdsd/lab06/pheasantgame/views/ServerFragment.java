@@ -9,10 +9,12 @@ import java.io.PrintStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.List;
 import java.util.Random;
 
 import ro.pub.cs.systems.pdsd.lab06.pheasantgame.R;
 import ro.pub.cs.systems.pdsd.lab06.pheasantgame.general.Constants;
+import ro.pub.cs.systems.pdsd.lab06.pheasantgame.general.Utilities;
 import android.app.Fragment;
 import android.os.Bundle;
 import android.util.Log;
@@ -57,24 +59,86 @@ public class ServerFragment extends Fragment {
 				}
 			}
 			
-			try {
-				responseStream = socket.getOutputStream();
-			} catch (IOException ioException) {
-				Log.e(Constants.TAG, "An exception has occurred: "+ioException.getMessage());
-				if (Constants.DEBUG) {
-					ioException.printStackTrace();
+			while (isRunning) {
+				BufferedReader requestReader = new BufferedReader(new InputStreamReader(requestStream));
+				String request = new String();
+				try {
+					Log.d(Constants.TAG, "[SERVER] Waiting to receive data with prefix \""+expectedWordPrefix+"\" on socket "+socket);
+					request = requestReader.readLine();
+					final String finalizedRequest = request;
+					serverHistoryTextView.post(new Runnable() {
+						@Override
+						public void run() {
+							serverHistoryTextView.setText("Server received word "+finalizedRequest+" from client\n"+serverHistoryTextView.getText());
+						}
+					});
+					Log.d(Constants.TAG, "[SERVER] Received "+request+" on socket "+socket);
+				} catch (IOException ioException) {
+					Log.e(Constants.TAG, "An exception has occurred: "+ioException.getMessage());
+					if (Constants.DEBUG) {
+						ioException.printStackTrace();
+					}
+				}
+				try {
+					responseStream = socket.getOutputStream();
+				} catch (IOException ioException) {
+					Log.e(Constants.TAG, "An exception has occurred: "+ioException.getMessage());
+					if (Constants.DEBUG) {
+						ioException.printStackTrace();
+					}
+				}
+				PrintStream responsePrintWriter = new PrintStream(responseStream);
+				if (Constants.END_GAME.equals(request)) {
+					Log.d(Constants.TAG, "[SERVER] Sent \""+Constants.END_GAME+"\" on socket "+socket);
+					responsePrintWriter.println(Constants.END_GAME);
+					serverHistoryTextView.post(new Runnable() {
+						@Override
+						public void run() {
+							serverHistoryTextView.setText("Communication ended!\n"+serverHistoryTextView.getText());
+						}
+					});
+					isRunning = false;					
+				} else {
+					if ((Utilities.wordValidation(request)) && (request.length() > 2) && (expectedWordPrefix.isEmpty() || request.startsWith(expectedWordPrefix))) {
+						String wordPrefix = request.substring(request.length()-2, request.length());
+						List<String> wordList = Utilities.getWordListStartingWith(wordPrefix);
+						
+						if (wordList.size() == 0) {
+							Log.d(Constants.TAG, "[SERVER] Sent \""+Constants.END_GAME+"\" on socket "+socket);
+							responsePrintWriter.println(Constants.END_GAME);
+							serverHistoryTextView.post(new Runnable() {
+								@Override
+								public void run() {
+									serverHistoryTextView.setText("Server sent word \""+Constants.END_GAME+"\" to client because it was locked out\n"+serverHistoryTextView.getText());
+								}
+							});
+							isRunning = false;
+						} else {
+							int wordIndex = random.nextInt(wordList.size());
+							final String word = wordList.get(wordIndex);
+							expectedWordPrefix = word.substring(word.length()-2, word.length());
+							Log.d(Constants.TAG, "[SERVER] Sent \""+word+"\" on socket "+socket);
+							responsePrintWriter.println(wordList.get(wordIndex));
+							serverHistoryTextView.post(new Runnable() {
+								@Override
+								public void run() {
+									serverHistoryTextView.setText("Server sent word "+word+" to client\n"+serverHistoryTextView.getText());
+								}
+							});
+						}
+					} else {
+						Log.d(Constants.TAG, "[SERVER] Sent \""+request+"\" on socket "+socket);
+						responsePrintWriter.println(request);
+						final String finalizedRequest = request;
+						serverHistoryTextView.post(new Runnable() {
+							@Override
+							public void run() {
+								serverHistoryTextView.setText("Server sent back the word "+finalizedRequest+" to client as it is not valid!\n"+serverHistoryTextView.getText());
+							}
+						});
+					}
 				}
 			}
-			
-			BufferedReader requestReader = new BufferedReader(new InputStreamReader(requestStream));
-			PrintStream responsePrintWriter = new PrintStream(responseStream);
-			
-			while (isRunning) {
-				
-				// TODO: exercise 7
-				
-			}
-
 			try {
 				socket.close();
 			} catch (IOException ioException) {
